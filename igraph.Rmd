@@ -1,0 +1,396 @@
+---
+title: "R Notebook"
+author: "Paco"
+date: '2022-08-02'
+output: html_document
+---
+
+
+# igraph
+
+
+In case you need to connect to Cytoscape.
+
+```{r}
+require(RCy3)
+cytoscapePing()
+openSession("C:/Users/Paco/Desktop/24arabidopsis.cys")
+nodetab=getTableColumns(table="node")
+edgetab=getTableColumns(table="edge")
+ig2 <- createIgraphFromNetwork("STRING network")
+
+exportNetwork(
+  filename = "C:/Users/Paco/Desktop/arabidopsis24.sif",
+  type = "SIF",
+  network = NULL,
+  base.url = NULL
+)
+```
+
+
+```{r}
+# dds is the deseq2 result object
+dds%>% column_to_rownames(var="X") %>% 
+  filter(abs(log2FoldChange)>1) %>%
+  filter(padj<0.05) %>%
+  arrange(padj)%>%
+  head(500)->dds
+
+# normalized are normalized counts result from deseq
+normalized %>% column_to_rownames(var="X")->normalized
+
+# join both files and build the matrix
+mat<-merge(dds, normalized2, by=0)
+ 
+# extract the columns that you need for the matrix
+cbind(mat[,1], mat[,8:13])-> mat
+  
+
+library(igraph)
+  
+# Create a graph adjacency based on correlation distances between genes in  pairwise fashion.
+g <- graph.adjacency(
+  as.matrix(as.dist(cor(t(mat), method="pearson"))),
+  mode="undirected",
+  weighted=TRUE,
+  diag=FALSE
+)
+```
+
+
+
+
+
+
+```{r}
+# Simplfy the adjacency object
+g2 <- simplify(g)
+
+# Colour negative correlation edges as blue
+E(g2)[which(E(g2)$weight<0)]$color <- "darkblue"
+
+# Colour positive correlation edges as red
+E(g2)[which(E(g2)$weight>0)]$color <- "darkred"
+
+# Convert edge weights to absolute values
+E(g2)$weight <- abs(E(g2)$weight)
+
+# Change arrow size
+# For directed graphs only
+#E(g)$arrow.size <- 1.0
+
+# Remove edges below absolute Pearson correlation 0.8
+g2 <- delete_edges(g2, E(g2)[which(E(g2)$weight<0.5)])
+
+# Remove any vertices remaining that have no edges
+g2 <- delete.vertices(g2, degree(g2)==0)
+
+# Assign names to the graph vertices (optional)
+V(g2)$name <- V(g2)$name
+
+# Change shape of graph vertices
+V(g2)$shape <- "sphere"
+
+# Change colour of graph vertices
+V(g2)$color <- "skyblue"
+
+# Change colour of vertex frames
+V(g2)$vertex.frame.color <- "white"
+
+# Scale the size of the vertices to be proportional to the level of expression of each gene represented by each vertex
+# Multiply scaled vales by a factor of 10
+#scale01 <- function(x){(x-min(x))/(max(x)-min(x))}
+#vSizes <- (scale01(apply(matbueno, 1, mean)) + 1.0) * 10
+
+# Amplify or decrease the width of the edges
+edgeweights <- E(g2)$weight * 2.0
+
+# Convert the graph adjacency object into a minimum spanning tree based on Prim's algorithm
+mst24<- mst(g2, algorithm="prim")
+
+```
+
+
+```{r}
+# identify communities in the tree object based on 'edge betweenness'
+mst.communities24 <- edge.betweenness.community(mst24)
+mst.clustering24 <- make_clusters(mst24, membership=mst.communities24$membership)
+V(mst24)$color <- mst.communities24$membership + 1
+
+length(mst.communities24)
+sizes(mst.communities24)
+
+
+
+plot(
+  mst.clustering24, mst24,
+  layout=layout.fruchterman.reingold,
+  edge.curved=TRUE,
+  vertex.label=NA,
+  vertex.size=vSizes,
+  vertex.label.dist=-0.5,
+  vertex.label.color="black",
+  asp=FALSE,
+  vertex.label.cex=0.6,
+  edge.width=edgeweights,
+  edge.arrow.mode=0)
+
+plot(
+  mst24,
+  layout=layout.fruchterman.reingold,
+  edge.curved=TRUE,
+  vertex.label=NA,
+  vertex.size=vSizes,
+  vertex.label.dist=-0.5,
+  vertex.label.color="black",
+  asp=FALSE,
+  vertex.label.cex=0.6,
+  edge.width=edgeweights,
+  edge.arrow.mode=0)
+```
+
+
+
+## Basic information about the network
+
+Let’s start by getting some basic information for the network, such as the number of nodes and edges. There are a couple of functions to help you extract this information without having to look it up in the “object summary” (e.g., summary(g)). Using these functions, you can store this information as separate objects, e.g., n for # nodes and m for # edges.
+
+```{r}
+n=vcount(g2)
+m=ecount(g2)
+n
+m
+
+#calculamos la densidad de la red
+
+dyads=n*(n-1)/2
+density=m/dyads
+density
+```
+
+
+
+## Centrality measures
+
+There are many, many available centrality measures that have been developed for network analysis. At present, there is no program that is so comprehensive that it includes all of the measures. We will, therefore, limit this discussion to a subset of the measures that are included in igraph. These include the “big four” measures (degree, betweenness, closeness, and eigenvector) and a few useful others. In what follows, we introduce:
+
+Degree Centrality
+In-degree
+Out-degree
+Eigenvector Centrality
+Hubs & Authorities
+Closeness Centrality
+Reach Centrality
+Betweenness Centrality
+Degree Centrality
+
+
+## Degree
+
+```{r}
+Degree <- degree(mst24)
+
+```
+
+
+## Eigenvector Centrality
+
+Eigenvector centrality calculations are iterative and can produce a wealth of information. Most users will only be interested in the centrality scores, however. Therefore, when you calculate eigenvector centrality, you will need to tell igraph that you are only interested in the vector of centrality scores that you are calculating.
+```{r}
+Eig <- evcent(mst24)$vector
+```
+
+
+## Closeness
+
+Note that this version of closeness is sensitive to Freeman’s original conceptualization of how closeness should be measured. Although it will produce measures for network that have multiple, disconnected components, it will also produce a warning that the question of what to do with disconnected components is not settled or well defined. So, caveat emptor.
+
+```{r}
+Closeness <- closeness(mst24)
+```
+
+
+## Betweenness
+
+```{r}
+Betweenness <- betweenness(mst24)
+
+```
+
+
+
+## Comparing centrality scores
+
+To keep all your work in one place, put it all together in one data frame. You can then export the data frame to a spreadsheet, or sort it in R (see the “Some More Advanced Versions of Doing the Above” section of this site for that).
+
+
+```{r}
+centralities <- cbind(Degree, Eig,  Closeness, Betweenness)
+centralities2 <- cbind(Degree, Eig,  Closeness, Betweenness)
+# Save it to your computer as a spreadsheet
+write.csv2(centralities2, file="./centralities24.csv")
+
+
+```   
+
+
+R is primarily a statistical program. So you can take advantage of that by seeing how correlated the various centralities are.
+
+```{r}
+centralities2<- round(cor(centralities2), 2)
+centralities2
+centralities<- round(cor(centralities), 2)
+centralities
+```
+
+The cor() function produces a correlation matrix. In this case, we can see the correlation values for each pair of centralities. We can see, for example, that degree is correlated with eigenvector, hubs, and authorities at a 0.91 level.
+
+The round( , ) function sets the number of digits that are displayed after the decimal. If you would like to see what you would have gotten if you had not rounded to the first two places after the decimal, try: cor(centralities). The round function takes two arguments: (1) the object, number, or vector that you are rounding, and (2) the number of digits that should appear after the decimal in the output. In this case, we have set the output to just include two digits after the decimal.
+
+
+```{r}
+V(mst72)$degree <- degree(mst72)                        # Degree centrality
+V(mst72)$eig <- evcent(mst72)$vector                    # Eigenvector centrality
+V(mst72)$closeness <- closeness(mst72)                  # Closeness centrality
+V(mst72)$betweenness <- betweenness(mst72)              # Vertex betweenness centrality
+```
+
+```{r}
+centrality24 <- data.frame(row.names   = V(mst72)$name,
+                         degree      = V(mst72)$degree,
+                         closeness   = V(mst72)$closeness,
+                         betweenness = V(mst72)$betweenness,
+                         eigenvector = V(mst72)$eig)
+
+centrality24 <- centrality24[order(row.names(centrality24)),]
+(head(centrality24, 10, by=Degree))->hola
+hola
+
+write.csv2(centrality24, file="./hubs24.csv")
+
+# Plot the centrality
+
+plot1<-ggplot(centrality24, aes(x=degree), bindwith=1)  +
+  geom_bar(color = "#000000", fill = "#0099F8") +
+  
+  labs(
+    x = "Degree",
+    y = "Count"
+  ) +
+  theme_classic()
+
+plot1
+
+plot2<-ggplot(centrality24, aes(x=betweenness))  +
+  geom_histogram(color = "#000000", fill = "#0099F8") +
+  
+  labs(
+    x = "Betweennees",
+    y = "Count"
+  ) +
+  theme_classic()
+
+plot2
+```
+
+```{r}
+
+transitivity(g2)
+diameter(mst24)
+ mean_distance(mst24)
+# Generate 1000 random graphs
+gl3 <- vector('list',100)
+  
+for(i in 1:100){
+  gl3[[i]] <-  rewire(mst72, each_edge(prob = 0.05))
+}
+
+for(i in 1:100){
+  gl[[i]] <- barabasi.game(n = gorder(mst), power = 0.4, m = 3, out.dist = NULL, out.seq = NULL,
+  out.pref = FALSE, zero.appeal = 1, directed = FALSE,
+  algorithm ="psumtree", start.graph = NULL)
+}
+
+# Calculate average path length of 1000 random graphs
+gl.apls3 <- unlist(lapply(gl3, mean_distance, directed = FALSE))
+mean(gl.apls)
+sd(gl.apls)
+
+# Calculate average transivity of 1000 random graphs
+mean(transitivity(mst24))
+gl.trans <- unlist(lapply(gl, transitivity))
+mean(gl.trans)
+sd(gl.trans)
+
+# Calculate average centrality
+gl.eigen <- unlist(lapply(gl,global_efficiency))
+mean(gl.eigen)
+sd(gl.eigen)
+
+#Conectivity
+vertex_connectivity(mst24, source = NULL, target = NULL, checks = TRUE)
+
+#Density
+
+gl.density3<- unlist(lapply(gl3, edge_density))
+mean(gl.density3)
+sd(gl.density)
+
+#Reciprocity
+gl.reciprocity3<- unlist(lapply(gl3, reciprocity))
+mean(gl.reciprocity3)
+sd(gl.reciprocity)
+
+#Modularity
+
+modularity(mst.clustering24)
+
+#Centralzation
+
+centr_degree(mst24)
+centr_clo(mst24, mode = "all")$centralization
+centr_betw(mst24, directed = FALSE)$centralization
+centr_eigen(mst24, directed = FALSE)$centralization
+
+gl.degree3$centralization<-unlist(lapply(gl3,centr_degree))
+centr_degree(mst72)
+
+
+gl.betw3<-unlist(lapply(gl3,centr_betw, directed = FALSE))
+mean(gl.betw3)
+
+gl.clo3<-unlist(lapply(gl3,centr_clo, directed = FALSE))
+mean(gl.betw3)
+
+gl.eigen3<-unlist(lapply(gl3,centr_eigen, directed = FALSE))
+mean(gl.betw3)
+
+#Index<-c("Average clustering coefficient (avgCC)","Average path distance (GD)", "Harmonic geodesic distance (HD)", "Density (D)", "Reciprocity","Connectedness (Con)", "Efficiency", "Modularity")
+, "T1", "T2", "T3","T1", "T2", "T3","T1", "T2", "T3","CC", "CC","CC","Density","Density","Density","Modularity","Modularity","Modularity"
+,"0","0","0","0.005","0.007","0.0008","0.89","0.92","0.96"
+
+id<-c("T1", "T2", "T3")
+variable<-c("GD","GD","GD")
+score<-as.numeric(c("12.81","17","27.00"))
+sd<-as.numeric(c("0.53", "0.53","0.53"))
+
+df<-data.frame(id, variable, score, sd)
+
+
+```
+
+
+```{r}
+#Get the average path length of the graph g
+g.apl3 <- mean_distance(mst, directed = FALSE)
+g.apl3
+# Calculate the proportion of graphs with an average path length lower than our observed
+mean(gl.apls)
+sd(gl.apls)
+```
+```{r}
+
+comunidad<-membership(mst.communities)
+modularity(g2, membership(mst.communities))
+
+```
