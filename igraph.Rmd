@@ -30,7 +30,7 @@ exportNetwork(
 
 ```{r}
 # dds is the deseq2 result object
-dds%>% column_to_rownames(var="X") %>% 
+dds %>% column_to_rownames(var="X") %>% 
   filter(abs(log2FoldChange)>1) %>%
   filter(padj<0.05) %>%
   arrange(padj)%>%
@@ -153,39 +153,22 @@ plot(
 
 ## Basic information about the network
 
-Let’s start by getting some basic information for the network, such as the number of nodes and edges. There are a couple of functions to help you extract this information without having to look it up in the “object summary” (e.g., summary(g)). Using these functions, you can store this information as separate objects, e.g., n for # nodes and m for # edges.
-
+Get the number of nodes, edges, and density of the network
 ```{r}
 n=vcount(g2)
 m=ecount(g2)
 n
 m
 
-#calculamos la densidad de la red
-
-dyads=n*(n-1)/2
-density=m/dyads
-density
+# network density
+edge_density(mst24)
 ```
 
 
 
 ## Centrality measures
 
-There are many, many available centrality measures that have been developed for network analysis. At present, there is no program that is so comprehensive that it includes all of the measures. We will, therefore, limit this discussion to a subset of the measures that are included in igraph. These include the “big four” measures (degree, betweenness, closeness, and eigenvector) and a few useful others. In what follows, we introduce:
-
-Degree Centrality
-In-degree
-Out-degree
-Eigenvector Centrality
-Hubs & Authorities
-Closeness Centrality
-Reach Centrality
-Betweenness Centrality
-Degree Centrality
-
-
-## Degree
+### Degree
 
 ```{r}
 Degree <- degree(mst24)
@@ -193,24 +176,23 @@ Degree <- degree(mst24)
 ```
 
 
-## Eigenvector Centrality
+### Eigenvector Centrality
 
-Eigenvector centrality calculations are iterative and can produce a wealth of information. Most users will only be interested in the centrality scores, however. Therefore, when you calculate eigenvector centrality, you will need to tell igraph that you are only interested in the vector of centrality scores that you are calculating.
+
 ```{r}
 Eig <- evcent(mst24)$vector
 ```
 
 
-## Closeness
+### Closeness
 
-Note that this version of closeness is sensitive to Freeman’s original conceptualization of how closeness should be measured. Although it will produce measures for network that have multiple, disconnected components, it will also produce a warning that the question of what to do with disconnected components is not settled or well defined. So, caveat emptor.
 
 ```{r}
 Closeness <- closeness(mst24)
 ```
 
 
-## Betweenness
+### Betweenness
 
 ```{r}
 Betweenness <- betweenness(mst24)
@@ -221,36 +203,18 @@ Betweenness <- betweenness(mst24)
 
 ## Comparing centrality scores
 
-To keep all your work in one place, put it all together in one data frame. You can then export the data frame to a spreadsheet, or sort it in R (see the “Some More Advanced Versions of Doing the Above” section of this site for that).
-
 
 ```{r}
 centralities <- cbind(Degree, Eig,  Closeness, Betweenness)
-centralities2 <- cbind(Degree, Eig,  Closeness, Betweenness)
-# Save it to your computer as a spreadsheet
-write.csv2(centralities2, file="./centralities24.csv")
 
-
-```   
-
-
-R is primarily a statistical program. So you can take advantage of that by seeing how correlated the various centralities are.
-
-```{r}
-centralities2<- round(cor(centralities2), 2)
-centralities2
 centralities<- round(cor(centralities), 2)
 centralities
 ```
 
-The cor() function produces a correlation matrix. In this case, we can see the correlation values for each pair of centralities. We can see, for example, that degree is correlated with eigenvector, hubs, and authorities at a 0.91 level.
-
-The round( , ) function sets the number of digits that are displayed after the decimal. If you would like to see what you would have gotten if you had not rounded to the first two places after the decimal, try: cor(centralities). The round function takes two arguments: (1) the object, number, or vector that you are rounding, and (2) the number of digits that should appear after the decimal in the output. In this case, we have set the output to just include two digits after the decimal.
-
 
 ```{r}
-V(mst72)$degree <- degree(mst72)                        # Degree centrality
-V(mst72)$eig <- evcent(mst72)$vector                    # Eigenvector centrality
+V(mst72)$degree <- degree(mst24)                        # Degree centrality
+V(mst72)$eig <- evcent(mst24)$vector                    # Eigenvector centrality
 V(mst72)$closeness <- closeness(mst72)                  # Closeness centrality
 V(mst72)$betweenness <- betweenness(mst72)              # Vertex betweenness centrality
 ```
@@ -263,12 +227,8 @@ centrality24 <- data.frame(row.names   = V(mst72)$name,
                          eigenvector = V(mst72)$eig)
 
 centrality24 <- centrality24[order(row.names(centrality24)),]
-(head(centrality24, 10, by=Degree))->hola
-hola
 
-write.csv2(centrality24, file="./hubs24.csv")
-
-# Plot the centrality
+# Plot the centrality measures
 
 plot1<-ggplot(centrality24, aes(x=degree), bindwith=1)  +
   geom_bar(color = "#000000", fill = "#0099F8") +
@@ -279,7 +239,6 @@ plot1<-ggplot(centrality24, aes(x=degree), bindwith=1)  +
   ) +
   theme_classic()
 
-plot1
 
 plot2<-ggplot(centrality24, aes(x=betweenness))  +
   geom_histogram(color = "#000000", fill = "#0099F8") +
@@ -289,108 +248,109 @@ plot2<-ggplot(centrality24, aes(x=betweenness))  +
     y = "Count"
   ) +
   theme_classic()
-
-plot2
 ```
 
 ```{r}
-
-transitivity(g2)
-diameter(mst24)
- mean_distance(mst24)
 # Generate 1000 random graphs
-gl3 <- vector('list',100)
-  
-for(i in 1:100){
+
+
+gl1 <- vector('list',1000)
+gl2 <- vector('list',1000)
+gl3 <- vector('list',1000)
+   
+
+# mst
+for(i in 1:1000){
+  gl1[[i]] <-  rewire(mst24, each_edge(prob = 0.05))
+}
+
+for(i in 1:1000){
+  gl2[[i]] <-  rewire(mst48, each_edge(prob = 0.05))
+}
+
+for(i in 1:1000){
   gl3[[i]] <-  rewire(mst72, each_edge(prob = 0.05))
 }
 
-for(i in 1:100){
-  gl[[i]] <- barabasi.game(n = gorder(mst), power = 0.4, m = 3, out.dist = NULL, out.seq = NULL,
-  out.pref = FALSE, zero.appeal = 1, directed = FALSE,
-  algorithm ="psumtree", start.graph = NULL)
-}
-
 # Calculate average path length of 1000 random graphs
-gl.apls3 <- unlist(lapply(gl3, mean_distance, directed = FALSE))
-mean(gl.apls)
-sd(gl.apls)
+
+
+gl.aplsC24<- unlist(lapply(gl1, mean_distance, directed = FALSE))
+gl.aplsC48<- unlist(lapply(gl2, mean_distance, directed = FALSE))
+gl.aplsC72<- unlist(lapply(gl3, mean_distance, directed = FALSE))
+
+#Average diameter
+
+
+gl.aplsC24<- unlist(lapply(gl1, diameter, directed = FALSE))
+gl.aplsC48<- unlist(lapply(gl2, diameter, directed = FALSE))
+gl.aplsC72<- unlist(lapply(gl3, diameter, directed = FALSE))
+
 
 # Calculate average transivity of 1000 random graphs
-mean(transitivity(mst24))
-gl.trans <- unlist(lapply(gl, transitivity))
-mean(gl.trans)
-sd(gl.trans)
-
-# Calculate average centrality
-gl.eigen <- unlist(lapply(gl,global_efficiency))
-mean(gl.eigen)
-sd(gl.eigen)
-
-#Conectivity
-vertex_connectivity(mst24, source = NULL, target = NULL, checks = TRUE)
-
-#Density
-
-gl.density3<- unlist(lapply(gl3, edge_density))
-mean(gl.density3)
-sd(gl.density)
-
-#Reciprocity
-gl.reciprocity3<- unlist(lapply(gl3, reciprocity))
-mean(gl.reciprocity3)
-sd(gl.reciprocity)
-
-#Modularity
-
-modularity(mst.clustering24)
-
-#Centralzation
-
-centr_degree(mst24)
-centr_clo(mst24, mode = "all")$centralization
-centr_betw(mst24, directed = FALSE)$centralization
-centr_eigen(mst24, directed = FALSE)$centralization
-
-gl.degree3$centralization<-unlist(lapply(gl3,centr_degree))
-centr_degree(mst72)
 
 
-gl.betw3<-unlist(lapply(gl3,centr_betw, directed = FALSE))
-mean(gl.betw3)
+gl.aplsC24<- unlist(lapply(gl1, transitivity))
+gl.aplsC48<- unlist(lapply(gl2, transitivity))
+gl.aplsC72<- unlist(lapply(gl3, transitivity))
 
-gl.clo3<-unlist(lapply(gl3,centr_clo, directed = FALSE))
-mean(gl.betw3)
 
-gl.eigen3<-unlist(lapply(gl3,centr_eigen, directed = FALSE))
-mean(gl.betw3)
+# Density
 
-#Index<-c("Average clustering coefficient (avgCC)","Average path distance (GD)", "Harmonic geodesic distance (HD)", "Density (D)", "Reciprocity","Connectedness (Con)", "Efficiency", "Modularity")
-, "T1", "T2", "T3","T1", "T2", "T3","T1", "T2", "T3","CC", "CC","CC","Density","Density","Density","Modularity","Modularity","Modularity"
-,"0","0","0","0.005","0.007","0.0008","0.89","0.92","0.96"
-
-id<-c("T1", "T2", "T3")
-variable<-c("GD","GD","GD")
-score<-as.numeric(c("12.81","17","27.00"))
-sd<-as.numeric(c("0.53", "0.53","0.53"))
-
-df<-data.frame(id, variable, score, sd)
-
+gl.aplsC24<- unlist(lapply(gl1, edge_density))
+gl.aplsC48<- unlist(lapply(gl2, edge_density))
+gl.aplsC72<- unlist(lapply(gl3, edge_density))
 
 ```
 
+
+## ANOVA
 
 ```{r}
-#Get the average path length of the graph g
-g.apl3 <- mean_distance(mst, directed = FALSE)
-g.apl3
-# Calculate the proportion of graphs with an average path length lower than our observed
-mean(gl.apls)
-sd(gl.apls)
+
+df <- data.frame(id=c(1:1000),
+                 T1=gl.aplsC24,
+                 T2=gl.aplsC48,
+                 T3=gl.aplsC72)
+
+df <- df %>%
+  gather(key = "time", value = "score", T1, T2,T3) %>%
+  convert_as_factor(id,time)
+
+df %>%
+  group_by(time) %>%
+  get_summary_stats(score, type = "mean_sd")
+
+bxp <- ggboxplot(df, x = "time", y = "score", add = "point")
+bxp
+ 
+ 
+ggqqplot(df, "score", facet.by = "time")
+
+res.aov <- anova_test(data = df, dv = score, wid = id, within = time)
+get_anova_table(res.aov)
+
 ```
+
 ```{r}
-
-comunidad<-membership(mst.communities)
-modularity(g2, membership(mst.communities))
-
+# pairwise comparisons
+pwc <- df %>%
+  pairwise_t_test(
+    score ~ time, paired = TRUE,
+    p.adjust.method = "bonferroni"
+    )
+pwc
 ```
+
+```{r}
+# Visualization: box plots with p-values
+pwc <- pwc %>% add_xy_position(x = "time")
+bxp + 
+  stat_pvalue_manual(pwc) +
+  labs(
+    subtitle = get_test_label(res.aov, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  )
+```
+
+
