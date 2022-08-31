@@ -1,0 +1,169 @@
+---
+title: "deseq2"
+author: "Paco"
+date: '2022-08-02'
+output: html_document
+---
+
+
+```{r, echo=F}
+library("tidyverse")
+library("DESeq2")
+library("pheatmap")
+library("RColorBrewer")
+library("corrplot")
+library("FactoMineR")
+library("factoextra")
+library("ggpubr")
+library("ggrepel")
+```
+
+# Input
+
+We import our reads in a count matrix,  and the sample information table, that we obtained from the featureCounts output. We need to arrange the sample data so they are in the same order that of the count matrix columns.
+
+
+## Count matrix
+
+
+```{r}
+counts <- as.matrix(read.csv("./matrixcounts.csv",header = TRUE, sep = ";", dec = ".", row.names="X"))
+samples_data<-read.csv("./melon_sample_annotation.csv") 
+```
+
+# SummarizedExperiment input
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = counts, 
+                                       colData = samples_data, design = ~condition)
+dds
+```
+
+## Filtering 
+
+We removed rows in which there are very few reads, reducing the memory size of the dds data object, and we increase the speed of the transformation and testing functions within DESeq2. It can also improve visualizations.
+
+```{r}
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep,]
+```
+
+By default, R will choose a reference level for factors based on alphabetical order. Still, we releveled the condition factor to make sure that we are comparing infection vs control.
+  
+```{r}
+dds$condition<-as.factor(dds$condition)
+dds$condition <- relevel(dds$condition, ref = "Control")
+levels(dds_fc_hisat_filter10$condition)
+```
+
+
+
+# Differential expression analysis
+
+The differential expression analysis steps are wrapped into a single function, DESeq. We can extract the results of the analysis using the result function.
+
+```{r}
+dds <- DESeq(dds)
+res <- results(dds)
+res
+```
+
+## Trasnforming data, Variance stabilizing transformation (VST)
+
+Extracted transformed data. Includes correction for size factors or normalization factors. The transformed data is on the log2 scale for large counts.
+
+```{r}
+vsd <- vst(dds)
+
+```
+
+# Data visualization 
+
+## PCA
+
+For this purpose we used the plotPCA function, further customizing the plot using ggplot.
+
+```{r}
+pcaData <- plotPCA(vsd, intgroup=c("condition", "time"), returnData=TRUE)
+# extract the percentages of each principal component
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+# basic plot
+ggplot(pcaData, aes(PC1, PC2, color=condition, shape=time)) +
+  geom_point(size=3) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+```
+
+## Heatmap of the sample-to-sample distances
+
+```{r}
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$condition, vsd$type, sep="-")
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+```
+
+## Heatmap of the most informative genes
+
+
+Select the top 20 most informative genes and plot a heatmap of these genes. This could be done selecting specific genes of interest.
+
+```{r}
+# select the 20 top genes ordered by padj
+topVarGenes <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 20)
+mat  <- assay(vsd)[ topVarGenes, ]
+# extract the gene labels and plot the matrix 
+anno <- as.data.frame(colData(vsd)[c("condition")])
+pheatmap(mat, annotation_col = anno)
+```
+
+## MA plot
+
+
+
+We used the function plotMA shows the log2 fold changes attributable to a given variable over the mean of normalized counts for all the samples in the DESeqDataSet
+
+```{r}
+plotMA(res, ylim=c(-5,5))
+```
+
+
+
+## Volcano plot
+
+
+```{r}
+# extract results as a data frame
+resSig <- as.data.frame(subset(res, padj < 0.05))
+# Create significant (sig) column
+resSig$sig <- "notsig"
+# if log2Foldchange > 0.6 and pvalue < 0.05, set as "UP" 
+resSig$sig[resSig$log2FoldChange > 1 & resSig$pvalue < 0.05] <- "Up"
+# if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
+resSig$sig[resSig$log2FoldChange < -1 & resSig$pvalue < 0.05] <- "Down"
+# create new column with na values to store gene labels
+resSig$delabel <- NA
+# if sig was either Up or Down, store the gene label 
+resSig$delabel[resSig$sig != "notsig"] <- row.names(resSig)[resSig$sig != "notsig"]
+
+# basic plot that can be edited
+p<-ggplot(data=resSig, aes(x=log2FoldChange, y=-log10(pvalue), col=sig, label=delabel)) +
+        geom_point() + 
+        theme_minimal() +
+        geom_text_repel(show.legend = FALSE) +
+        scale_color_manual(values=c("cornflowerblue", "grey", "firebrick")) +
+        theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"),
+        legend.key = element_blank())
+
+p + theme(legend.title = element_blank())
+
+```
