@@ -20,23 +20,23 @@ Staying in the same directory, run the following command:
 
 `$ hisat2 -f -x $path/to/index/index -1 $path/to/reads/read_1.fq -2 $path/to/reads/read_2.fq -S eg2.sam`
 
-You can use SAMtools together with this step, which is a collection of tools for manipulating and analyzing SAM and BAM alignment files. You can simply pipe the following commands to the previus line of code `| samtools view -Sb | samtools sort -m 2G -o /desired/path`. Now you have a sorted BAM file called eg2.sorted.bam for each pair of reads, forward and reverse. You can create a new directory and move the BAM files in it, you can even include it in the job script `mv *eg2.sorted.bam* ../alignment/sorted/` for example.
+You can use SAMtools together with this step, which is a collection of tools for manipulating and analyzing SAM and BAM alignment files. You can simply pipe the following commands to the previus line of code `| samtools view -Sb | samtools sort -o /desired/path`. Now you have a sorted BAM file called eg2.sorted.bam for each pair of reads, forward and reverse. You can create a new directory and move the BAM files in it, you can even include it in the job script `mv *eg2.sorted.bam* ../alignment/sorted/` for example.
 
 The last step before moving onto the R notebooks contained in the repository will be counts how many reads mapped to genes. For this purpose you can use multiple softwares. In particular we used _featureCounts_, which is part of the subreads package.
 
 `featureCounts -p -O -t exon -g gene_id n -a /path/to/indes/DHL92_v4.gtf -o example_output_file.txt eg2.sorted.bam`
 
-To make the count matrix of every bam file you can do the following: 
+Running these commands will produce feature count tables. To make the count matrix of every bam file you can do the following: 
 
 `featureCounts -a /path/to/indes/DHL92_v4.gtf -o example_output_file.txt *bam \
 | cut -f1,7- | sed 1d > counts.mx`
 
-Providing the count matrix, the information about the samples (the columns of the count matrix), and the design formula, the data is now ready to analyse with the stadistical packages in R _(DESeq2, igraph)_.
+These combined feature count tables can be used for differential expression (DE) analysis. An example DE analysis script is included in this project, DESeq2. This script uses the R programming language with the DESeq2 stadistical package, the count matrix, the information about the samples (the columns of the count matrix), and the design formula. Then, GO and KEGG anotation can be performed using the example script. Finally, an example gene co-expression analysis script using R package igraph is included as well.
 
 
 ## Credits
 
-This analysis is a reevaluation of the original paper by Polonio et al.  [[1]](#1).
+This analysis is a reevaluation of the original paper by Polonio et al.  [[1]](#1). It has been supervised by Manuel Franco Nicolas and Juana María Vivo Molina (Universidad de Murcia).
 
 ## Bibliography
 
