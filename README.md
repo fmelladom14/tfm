@@ -36,4 +36,16 @@ Providing the count matrix, the information about the samples (the columns of th
 
 ## Credits
 
-This analysis 
+This analysis is a reevaluation of the original paper by Polonio et al.  [[1]](#1).
+
+## Bibliography
+
+<a id="1">[1]</a> 
+Alvaro Polonio et al. “RNA-seq analysis and fluorescence imaging of melon powdery mildew dis-
+ease reveal an orchestrated reprogramming of host physiology”. In: Scientific Reports 9 (May 2019),
+p. 7978. DOI: 10.1038/s41598-019-44443-5.
+
+
+
+
+
